@@ -1,0 +1,238 @@
+---
+title: "Reproducible Research: Peer Assessment 1"
+output: html_document
+---
+
+### Load libraries
+```{r, echo=TRUE, results='hide', warning=FALSE, message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(scales)   
+```
+
+
+### Loading and preprocessing the data
+Download, unzip, and read in csv
+
+```{r, echo=TRUE}
+if (!file.exists(paste0(getwd(), '/data/activity.csv')) )
+{
+  fileUrl <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip"
+  download.file(fileUrl, destfile = paste0(getwd(), '/repdata%2Fdata%2Factivity.zip'), method = "curl")
+  unzip("repdata%2Fdata%2Factivity.zip",exdir = "data")
+}
+df <- read.csv(paste0(getwd(), '/data/activity.csv'), stringsAsFactors = FALSE)
+df$date <- as.Date(df$date)
+
+str(df)
+```
+
+
+
+#### 1. Make Histogram of the total number of steps taken each day
+
+```{r, echo=TRUE}
+stepsByDay <- df %>% group_by(date) %>% summarize(steps = sum(steps, na.rm=TRUE))
+head(stepsByDay)
+
+hist(stepsByDay$steps, main="Histogram of Steps by Day", xlab= "Steps By Day", ylab="Number of Days", breaks=20, col="gray")
+```
+
+Note that we ignored NA values with na.rm=TRUE
+
+
+
+####  2. Calculate the mean and median number of steps taken each day
+
+The mean number of steps per day is
+```{r, echo=TRUE}
+mean(stepsByDay$steps)
+``` 
+and the median number of steps per day is
+```{r, echo=TRUE}
+median(stepsByDay$steps)
+```
+
+Next, we can add these values to the histogram 
+
+```{r, echo=TRUE}
+stepsByDay <- df %>% group_by(date) %>% summarize(steps = sum(steps, na.rm=TRUE))
+hist(stepsByDay$steps, 
+     main="Histogram of Steps by Day", 
+     xlab= "Steps By Day", 
+     ylab="Number of Days", 
+     breaks=20, 
+     col="gray")
+abline(v=mean(stepsByDay$steps), lty=3, col="blue")
+text(mean(stepsByDay$steps),10,labels="mean", pos=1, col="blue") 
+abline(v=median(stepsByDay$steps), lty=4, col="red")
+text(median(stepsByDay$steps),9,labels="median", pos=1, col="red") 
+
+```
+
+
+
+####  3. Make a Time Series Plot of the Average Number of Steps Taken
+
+```{r, echo=TRUE}
+ggplot(stepsByDay, aes(x=date, y=steps)) +   
+  geom_line( color="steelblue") + 
+  geom_point() + 
+  xlab("Date") + 
+  ylab("Number of Steps") + 
+  scale_x_date(date_labels = "%b-%d-%Y") + 
+  scale_y_continuous(labels=comma) + 
+  ggtitle("Steps Taken in Day")
+```
+
+And then if we want to see the moving average line and band, we can add geom_smooth(method="loess") 
+
+```{r, echo=TRUE}
+ggplot(stepsByDay, aes(x=date, y=steps)) +   
+  geom_line( color="steelblue") + 
+  geom_point() + 
+  geom_smooth(method="loess") +  #adds moving average 
+  xlab("Date") + 
+  ylab("Number of Steps") + 
+  scale_x_date(date_labels = "%b-%d-%Y") + 
+  scale_y_continuous(labels=comma) + 
+  ggtitle("Steps Taken in Day - With Moving Average")
+```
+
+
+
+####  4. Find 5-minute interval that, on average, contains the maximum number of steps
+
+First, summarize data by interval
+
+```{r, echo=TRUE}
+stepsByInterval <- df %>% group_by(interval) %>% summarize(steps = mean(steps, na.rm=TRUE))
+head(stepsByInterval)
+```
+
+Then can find the maximum
+
+```{r, echo=TRUE}
+maxinterval <- stepsByInterval[which.max(stepsByInterval$steps), ]$interval
+maxinterval 
+```
+
+Or can visualize it in plot
+
+```{r, echo=TRUE}
+ggplot(data=stepsByInterval, aes(x=interval, y=steps)) +
+  geom_line() +
+  xlab("5-Minute Interval") +
+  ylab("Average Number of Steps Taken") + 
+  scale_y_continuous(labels=comma) + 
+  ggtitle("Average Steps Taken In 5 Minute Intervals")
+```
+
+
+
+### Imputing Missing Values
+
+
+
+#### Calculate and report the total number of missing values in the dataset
+
+The total number of rows with at least 1 NA is
+```{r, echo=TRUE}
+sum(!complete.cases(df))
+```
+
+The total number of NAs is
+```{r, echo=TRUE}
+sum(is.na(df))
+```
+
+
+
+#### Devise a strategy for filling in all of the missing values in the dataset
+
+We will make a new variable 'steps2' that will fill in the missing values of 'steps' with the overall average for the interval
+
+step 1: Summarize the data by interval
+
+```{r, echo=TRUE}
+ stepsByInterval <- df %>% group_by(interval) %>% summarize(avgsteps = mean(steps, na.rm=TRUE)) %>% ungroup()
+ head(stepsByInterval)
+```
+
+step 2: Merge it back to original dataframe
+
+```{r, echo=TRUE} 
+df <- merge(df, stepsByInterval, by="interval", all.x = TRUE)
+head(df)
+```
+
+step 3: Calculate 'steps2'
+
+```{r, echo=TRUE} 
+ df <- df %>% mutate(steps2 = ifelse(is.na(steps), avgsteps, steps))  
+head(df)
+```
+
+step 4: Create a new dataset that is equal to the original dataset but with the missing data filled in.
+```{r, echo=TRUE} 
+df2 <- df %>% select(interval, date, steps2) %>% rename(steps = steps2)
+head(df2)
+```
+
+
+
+#### Make Histogram of the total number of steps taken each day after missing values are imputed
+
+```{r, echo=TRUE} 
+ steps2ByDay <- df %>% group_by(date) %>% summarize(steps2 = sum(steps2, na.rm=TRUE))
+ hist(steps2ByDay$steps2,  breaks=20, col="gray", main="Histogram of (Imputed) Steps by Day", xlab= "Steps By Day", ylab="Number of Days")
+```
+
+
+
+#### Calculate the mean and median number of steps taken each day
+
+The mean number of steps per day is
+```{r, echo=TRUE}
+mean(steps2ByDay$steps2)
+``` 
+and the median number of steps per day is
+```{r, echo=TRUE}
+median(steps2ByDay$steps2)
+```
+
+Note that after imputing the NAs, the mean changed by
+```{r, echo=TRUE}
+mean(steps2ByDay$steps2) - mean(stepsByDay$steps) 
+``` 
+and the median changed by
+```{r, echo=TRUE}
+median(steps2ByDay$steps2) - median(stepsByDay$steps) 
+``` 
+
+
+
+### Weekdays vs Weekends
+
+
+
+#### Create a new factor variable in the dataset with two levels – “weekday” and “weekend” indicating whether a given date is a weekday or weekend day.
+
+```{r, echo=TRUE}
+df <- df %>% mutate(day_type = ifelse(weekdays(df$date) %in% c("Saturday", "Sunday"), "Weekend", "Weekday"))
+head(df)
+```
+
+#### Make a panel plot containing a time series plot of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all weekday days or weekend days (y-axis)
+
+```{r, echo=TRUE}
+stepsByInterval <- df %>% group_by(day_type, interval) %>% summarize(steps = mean(steps, na.rm=TRUE)) %>% ungroup()
+ggplot(data=stepsByInterval, aes(x=interval, y=steps), color=day_type) +
+  geom_line() +
+  xlab("5-Minute Interval") +
+  ylab("Average Number of Steps Taken") + 
+  scale_y_continuous(labels=comma) + 
+  ggtitle("Average Steps Taken In 5 Minute Intervals") + facet_grid(day_type ~ .)
+```
+
+
